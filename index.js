@@ -29,7 +29,19 @@ async function run() {
         const subscribersCollection = client.db('fitnest').collection('subscribers');
         const TrainersCollection = client.db('fitnest').collection('trainers');
 
-        // POST Subcriber
+        // users info save in db 
+        app.post('/users', async (req, res) => {
+            const email = req.body.email;
+            const UserExists = await usersCollection.findOne({ email })
+            if (UserExists) {
+                return res.status(400).send({ message: 'User already exists' })
+            }
+            const user = req.body;
+            const result = await usersCollection.insertOne(user);
+            res.send(result)
+        })
+
+        // Post Subcribers
         app.post('/subscribers', async (req, res) => {
             const { name, email } = req.body;
             if (!name || !email) {
@@ -67,7 +79,7 @@ async function run() {
 
         // get all trainers 
         app.get('/trainers/pending', async (req, res) => {
-            const trainers = await TrainersCollection.find({status:"pending"}).toArray();
+            const trainers = await TrainersCollection.find({ status: "pending" }).toArray();
             res.send(trainers);
         });
 
