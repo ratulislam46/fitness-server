@@ -25,6 +25,52 @@ async function run() {
     try {
         await client.connect();
 
+        const usersCollection = client.db('fitnest').collection('users');
+        const subscribersCollection = client.db('fitnest').collection('subscribers');
+        const TrainersCollection = client.db('fitnest').collection('trainers');
+
+        // POST Subcriber
+        app.post('/subscribers', async (req, res) => {
+            const { name, email } = req.body;
+            if (!name || !email) {
+                return res.status(400).json({ message: 'Name and email required' });
+            }
+            try {
+                const existing = await subscribersCollection.findOne({ email });
+                if (existing) {
+                    return res.status(409).json({ message: 'Already subscribed' });
+                }
+                const result = await subscribersCollection.insertOne({
+                    name,
+                    email,
+                    subscribed_at: new Date(),
+                });
+                res.status(201).json({ message: 'Subscribed successfully' });
+            } catch (error) {
+                console.error('Subscription error:', error);
+                res.status(500).json({ message: 'Server error' });
+            }
+        });
+
+        // get subcribers list
+        app.get('/subscribers', async (req, res) => {
+            const result = await subscribersCollection.find().toArray();
+            res.send(result);
+        });
+
+        // post applied trainer 
+        app.post("/applied-trainers", async (req, res) => {
+            const trainerData = req.body;
+            const result = await TrainersCollection.insertOne(trainerData);
+            res.send(result);
+        });
+
+        // get trainer list
+        app.get('/applied-trainers', async (req, res) => {
+            const trainers = await TrainersCollection.find().toArray();
+            res.send(trainers);
+        });
+
 
         // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
