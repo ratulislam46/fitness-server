@@ -28,6 +28,7 @@ async function run() {
         const usersCollection = client.db('fitnest').collection('users');
         const subscribersCollection = client.db('fitnest').collection('subscribers');
         const TrainersCollection = client.db('fitnest').collection('trainers');
+        const RejectTrainersCollection = client.db('fitnest').collection('rejected_trainer');
 
         // users info save in db 
         app.post('/users', async (req, res) => {
@@ -91,6 +92,7 @@ async function run() {
             res.send(trainer)
         });
 
+        // update user role and trainer status 
         app.patch('/trainers/status/:id', async (req, res) => {
             const id = req.params.id;
             const { status, email } = req.body;
@@ -109,6 +111,44 @@ async function run() {
                 res.status(500).send({ message: 'Error updating trainer status', error })
             }
         })
+
+        // rejected trainer info save in another collection 
+        app.post("/trainer-rejections", async (req, res) => {
+            try {
+                const rejectionData = req.body;
+
+                // Validation (optional)
+                if (!rejectionData.trainerId || !rejectionData.email || !rejectionData.feedback) {
+                    return res.status(400).json({ message: "Missing required rejection data." });
+                }
+
+                const result = await RejectTrainersCollection.insertOne(rejectionData);
+                res.status(201).json({ message: "Trainer rejection saved." });
+            } catch (error) {
+                console.error("Error saving trainer rejection:", error);
+                res.status(500).json({ message: "Server error while rejecting trainer." });
+            }
+        });
+
+
+        app.delete("/trainers/:id", async (req, res) => {
+            try {
+                const trainerId = req.params.id;
+                const query = { _id: new ObjectId(trainerId) }
+                const result = await TrainersCollection.deleteOne(query);
+
+                if (result.deletedCount === 1) {
+                    res.json({ message: "Trainer deleted from pending list." });
+                } else {
+                    res.status(404).json({ message: "Trainer not found." });
+                }
+            } catch (error) {
+                console.error("Error deleting trainer:", error);
+                res.status(500).json({ message: "Server error while deleting trainer." });
+            }
+        });
+
+
 
         // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
