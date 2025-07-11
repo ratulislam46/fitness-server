@@ -1,7 +1,7 @@
 require('dotenv').config()
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express()
 const port = process.env.PORT || 3000;
 
@@ -65,10 +65,18 @@ async function run() {
             res.send(result);
         });
 
-        // get trainer list
-        app.get('/applied-trainers', async (req, res) => {
-            const trainers = await TrainersCollection.find().toArray();
+        // get all trainers 
+        app.get('/trainers/pending', async (req, res) => {
+            const trainers = await TrainersCollection.find({status:"pending"}).toArray();
             res.send(trainers);
+        });
+
+        // get singel trainer by trainer id
+        app.get('/trainers/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const trainer = await TrainersCollection.findOne(query);
+            res.send(trainer)
         });
 
 
