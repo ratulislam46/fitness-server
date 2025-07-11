@@ -91,6 +91,24 @@ async function run() {
             res.send(trainer)
         });
 
+        app.patch('/trainers/status/:id', async (req, res) => {
+            const id = req.params.id;
+            const { status, email } = req.body;
+            const query = { _id: new ObjectId(id) };
+            const updateDoc = { $set: { status: status } }
+            try {
+                const result = await TrainersCollection.updateOne(query, updateDoc);
+                if (status === 'confirm') {
+                    const trainerQuery = { email };
+                    const trainerUpdateDoc = { $set: { role: 'trainer' } }
+                    const trainerRole = await usersCollection.updateOne(trainerQuery, trainerUpdateDoc);
+                }
+                res.send(result)
+            }
+            catch (error) {
+                res.status(500).send({ message: 'Error updating trainer status', error })
+            }
+        })
 
         // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
