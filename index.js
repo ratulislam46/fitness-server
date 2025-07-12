@@ -42,6 +42,36 @@ async function run() {
             res.send(result)
         })
 
+        // get users by user own email 
+        app.get('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            const result = await usersCollection.findOne({ email });
+            res.send(result);
+            console.log(result);
+        })
+
+        // user info update in db 
+        app.patch('/users/profile/:email', async (req, res) => {
+            try {
+                const email = req.params.email;
+                const UpdateData = req.body;
+                const filter = { email: email }
+                const updateDoc = {
+                    $set: {
+                        name: UpdateData.name,
+                        image: UpdateData.photoURL,
+                        last_login: new Date().toISOString()
+                    }
+                }
+                const result = await usersCollection.updateOne(filter, updateDoc);
+                res.send(result)
+            }
+            catch (error) {
+                console.error('Error updating user profile:', error);
+                res.status(500).send({ message: 'user profile updated error' });
+            }
+        })
+
         // Post Subcribers
         app.post('/subscribers', async (req, res) => {
             const { name, email } = req.body;
@@ -176,6 +206,7 @@ async function run() {
             }
         });
 
+        // get rejected trainer 
         app.get("/trainer-applications/rejected/:email", async (req, res) => {
             const email = req.params.email;
             const query = { email };
@@ -183,6 +214,7 @@ async function run() {
             res.send(result);
         });
 
+        // get trainer application status pending
         app.get("/trainer-applications/pending/:email", async (req, res) => {
             const email = req.params.email;
             const query = { email, status: "pending" };
