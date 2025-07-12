@@ -84,6 +84,17 @@ async function run() {
             res.send(trainers);
         });
 
+        // get all trainer at userscollection in db 
+        app.get("/trainers/all", async (req, res) => {
+            try {
+                const result = await usersCollection.find({ role: 'trainer' }).toArray()
+                res.send(result)
+            }
+            catch (error) {
+                res.status(500).send({ message: "Error fetching trainers" });
+            }
+        });
+
         // get singel trainer by trainer id
         app.get('/trainers/:id', async (req, res) => {
             const id = req.params.id;
@@ -112,6 +123,22 @@ async function run() {
             }
         })
 
+        app.patch('/trainer/change-role/:id', async (req, res) => {
+            const trainerId = req.params.id;
+            const { email } = req.body;
+
+            try {
+                const result = await usersCollection.updateOne(
+                    { _id: new ObjectId(trainerId) },
+                    { $set: { role: "member" } }
+                );
+                res.send(result)
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ message: "Error updating role." });
+            }
+        })
+
         // rejected trainer info save in another collection 
         app.post("/trainer-rejections", async (req, res) => {
             try {
@@ -130,8 +157,7 @@ async function run() {
             }
         });
 
-
-        app.delete("/trainers/:id", async (req, res) => {
+        app.delete("/trainers/delete/:id", async (req, res) => {
             try {
                 const trainerId = req.params.id;
                 const query = { _id: new ObjectId(trainerId) }
@@ -147,6 +173,9 @@ async function run() {
                 res.status(500).json({ message: "Server error while deleting trainer." });
             }
         });
+
+
+
 
 
 
