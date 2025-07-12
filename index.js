@@ -123,6 +123,7 @@ async function run() {
             }
         })
 
+        // trainer role change 
         app.patch('/trainer/change-role/:id', async (req, res) => {
             const trainerId = req.params.id;
             const { email } = req.body;
@@ -157,6 +158,7 @@ async function run() {
             }
         });
 
+        // trainer delete from pending trainer list 
         app.delete("/trainers/delete/:id", async (req, res) => {
             try {
                 const trainerId = req.params.id;
@@ -174,6 +176,19 @@ async function run() {
             }
         });
 
+        app.get("/trainer-applications/rejected/:email", async (req, res) => {
+            const email = req.params.email;
+            const query = { email };
+            const result = await RejectTrainersCollection.find(query).toArray();
+            res.send(result);
+        });
+
+        app.get("/trainer-applications/pending/:email", async (req, res) => {
+            const email = req.params.email;
+            const query = { email, status: "pending" };
+            const result = await TrainersCollection.find(query).toArray();
+            res.send(result);
+        });
 
 
 
