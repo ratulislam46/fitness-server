@@ -29,6 +29,7 @@ async function run() {
         const subscribersCollection = client.db('fitnest').collection('subscribers');
         const TrainersCollection = client.db('fitnest').collection('trainers');
         const RejectTrainersCollection = client.db('fitnest').collection('rejected_trainer');
+        const forumsCollection = client.db('fitnest').collection('forums');
 
         // users info save in db 
         app.post('/users', async (req, res) => {
@@ -47,7 +48,6 @@ async function run() {
             const email = req.params.email;
             const result = await usersCollection.findOne({ email });
             res.send(result);
-            console.log(result);
         })
 
         // user info update in db 
@@ -222,7 +222,87 @@ async function run() {
             res.send(result);
         });
 
+        // forum post by admin or trainer
+        app.post('/forums', async (req, res) => {
+            const forum = req.body;
+            const result = await forumsCollection.insertOne(forum);
+            res.send(result);
+        })
 
+        // get latest 6 forums
+        app.get("/forums/latest", async (req, res) => {
+            try {
+                const forums = await forumsCollection.find()
+                    .sort({ created_at: -1 })
+                    .limit(6)
+                    .toArray();
+
+                res.send(forums);
+            } catch (err) {
+                res.status(500).send({ message: "Failed to fetch forums" });
+            }
+        });
+
+        // get all forums 
+        app.get('/all/forums/routes', async (req, res) => {
+            try {
+                const forums = await forumsCollection.find().toArray();
+                res.send(forums);
+            } catch (err) {
+                res.status(500).send({ message: "Failed to fetch forums" });
+            }
+        })
+
+        // get forum by forum id and show forum details
+        app.get('/forum-details/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const forum = await forumsCollection.findOne(query)
+            res.send(forum)
+        })
+
+        // patch update forums up-vote and down-vote
+        app.patch('/forums/vote/:id', async (req, res) => {
+            const forumId = req.params.id;
+            const { vote, userEmail } = req.body;
+
+            if (!userEmail) {
+                return res.status(400).send({ message: "User email is required" });
+            }
+
+            try {
+                const forum = await forumsCollection.findOne({ _id: new ObjectId(forumId) });
+
+                if (!forum) {
+                    return res.status(404).send({ message: "Forum not found" });
+                }
+
+                let updatedVotes = forum.votes || [];
+
+                const alreadyVoted = updatedVotes.find(v => v.email === userEmail);
+
+                if (vote === "vote" && !alreadyVoted) {
+                    updatedVotes.push({ email: userEmail });
+                } else if (vote === "cancelVote" && alreadyVoted) {
+                    updatedVotes = updatedVotes.filter(v => v.email !== userEmail);
+                }
+
+                const result = await forumsCollection.updateOne(
+                    { _id: new ObjectId(forumId) },
+                    {
+                        $set: {
+                            votes: updatedVotes,
+                            count: updatedVotes.length
+                        }
+                    }
+                );
+
+                res.send(result);
+            } catch (error) {
+                console.error("Vote update error:", error);
+                res.status(500).send({ message: "Internal server error" });
+            }
+        });
 
 
 
