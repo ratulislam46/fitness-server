@@ -30,6 +30,7 @@ async function run() {
         const TrainersCollection = client.db('fitnest').collection('trainers');
         const RejectTrainersCollection = client.db('fitnest').collection('rejected_trainer');
         const forumsCollection = client.db('fitnest').collection('forums');
+        const classesCollection = client.db('fitnest').collection('classes');
 
         // users info save in db 
         app.post('/users', async (req, res) => {
@@ -246,7 +247,7 @@ async function run() {
         // get all forums 
         app.get('/all/forums/routes', async (req, res) => {
             try {
-                const forums = await forumsCollection.find().toArray();
+                const forums = await forumsCollection.find().sort({ created_at: -1 }).toArray();
                 res.send(forums);
             } catch (err) {
                 res.status(500).send({ message: "Failed to fetch forums" });
@@ -303,6 +304,42 @@ async function run() {
                 res.status(500).send({ message: "Internal server error" });
             }
         });
+
+        // post classes info 
+        app.post("/classes", async (req, res) => {
+            const classesData = req.body;
+            const result = await classesCollection.insertOne(classesData)
+            res.send(result)
+        })
+
+        // GET /classes?page=1&limit=6
+        app.get('/classes', async (req, res) => {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 6;
+            const skip = (page - 1) * limit;
+
+            const result = await classesCollection.find()
+                .skip(skip)
+                .limit(limit)
+                .sort({ created_at: -1 }) // optional: latest first
+                .toArray();
+
+            const total = await classesCollection.estimatedDocumentCount();
+
+            res.send({ result, total });
+        });
+
+        // GET /trainers-by-skill/:className
+        app.get('/trainers-by-skill/:className', async (req, res) => {
+            const className = req.params.className;
+            const trainers = await TrainersCollection.find({
+                skills: { $in: [className] },
+                status: 'confirm'
+            }).limit(5).toArray();
+
+            res.send(trainers);
+        });
+
 
 
 
