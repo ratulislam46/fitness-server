@@ -2,12 +2,22 @@ require('dotenv').config()
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const admin = require("firebase-admin");
 const app = express()
 const port = process.env.PORT || 3000;
 
 // middleware 
 app.use(cors());
 app.use(express.json());
+
+
+
+
+var serviceAccount = require("./firebase-admin-key.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
 
 
 
@@ -32,6 +42,32 @@ async function run() {
         const forumsCollection = client.db('fitnest').collection('forums');
         const classesCollection = client.db('fitnest').collection('classes');
 
+
+        // middleware 
+        const verifyFBToken = async (req, res, next) => {
+
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                return res.status(401).send({ message: 'unauthorized access' })
+            }
+            const token = authHeader.split(' ')[1]
+            if (!token) {
+                return res.status(401).send({ message: 'unauthorized access' })
+            }
+
+            // verify the token 
+            try {
+                const decoded = await admin.auth().verifyIdToken(token);
+                req.decoded = decoded;
+                next()
+            }
+            catch (error) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+
+        }
+
+
         // users info save in db 
         app.post('/users', async (req, res) => {
             const email = req.body.email;
@@ -45,7 +81,7 @@ async function run() {
         })
 
         // get users by user own email 
-        app.get('/users/:email', async (req, res) => {
+        app.get('/users/:email', verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const result = await usersCollection.findOne({ email });
             res.send(result);
@@ -312,7 +348,7 @@ async function run() {
             res.send(result)
         })
 
-        // GET /classes?page=1&limit=6
+        // get classes page limit
         app.get('/classes', async (req, res) => {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 6;
@@ -329,7 +365,7 @@ async function run() {
             res.send({ result, total });
         });
 
-        // GET /trainers-by-skill/:className
+        // get trainers-by-skill
         app.get('/trainers-by-skill/:className', async (req, res) => {
             const className = req.params.className;
             const trainers = await TrainersCollection.find({
