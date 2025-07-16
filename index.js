@@ -391,16 +391,38 @@ async function run() {
             res.send(trainer);
         });
 
-        // GET all slots by trainerId
+        // get all slots by trainerId
         app.get('/slots', async (req, res) => {
             const slots = await slotsCollection.find({ trainerId: req.query.trainerId }).toArray();
             res.send(slots);
         });
 
-        // POST new slot
+        // post new slot
         app.post('/slots', async (req, res) => {
             const result = await slotsCollection.insertOne(req.body);
             res.send(result);
+        });
+
+        // GET /slots-by-email/:email
+        app.get("/slots-by-email/:trainerEmail", async (req, res) => {
+            const trainerEmail = req.params.trainerEmail;
+            try {
+                const result = await slotsCollection.find({  trainerEmail }).toArray();
+                res.send(result);
+            } catch (err) {
+                res.status(500).send({ error: "Failed to fetch slots" });
+            }
+        });
+
+        // DELETE /slots/:id
+        app.delete("/slots/:id", async (req, res) => {
+            const id = req.params.id;
+            try {
+                const result = await slotsCollection.deleteOne({ _id: new ObjectId(id) });
+                res.send(result);
+            } catch (err) {
+                res.status(500).send({ error: "Failed to delete slot" });
+            }
         });
 
 
