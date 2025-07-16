@@ -6,6 +6,9 @@ const admin = require("firebase-admin");
 const app = express()
 const port = process.env.PORT || 3000;
 
+const stripe = require('stripe')(process.env.PAYMENT_GETEWAY_KEY);
+
+
 // middleware 
 app.use(cors());
 app.use(express.json());
@@ -42,6 +45,7 @@ async function run() {
         const forumsCollection = client.db('fitnest').collection('forums');
         const classesCollection = client.db('fitnest').collection('classes');
         const slotsCollection = client.db('fitnest').collection('slots');
+        const paymentsCollection = client.db('fitnest').collection('payments');
 
 
         // middleware 
@@ -144,6 +148,13 @@ async function run() {
             const trainerData = req.body;
             const result = await TrainersCollection.insertOne(trainerData);
             res.send(result);
+        });
+
+        // get trainer whoes status is confirm
+        app.get("/trainers", async (req, res) => {
+            const status = req.query.status || "confirm";
+            const trainers = await TrainersCollection.find({ status }).toArray();
+            res.send(trainers);
         });
 
         // get all trainers 
@@ -383,8 +394,6 @@ async function run() {
             res.send(result)
         })
 
-
-
         // GET trainer by email
         app.get('/trainers-by-email/:email', async (req, res) => {
             const trainer = await TrainersCollection.findOne({ email: req.params.email });
@@ -397,24 +406,57 @@ async function run() {
             res.send(slots);
         });
 
-        // post new slot
-        app.post('/slots', async (req, res) => {
-            const result = await slotsCollection.insertOne(req.body);
-            res.send(result);
+        // 👇 Add this route in your server file (e.g., index.js or slotRoutes.js)
+        app.get('/slots-in-trainer', async (req, res) => {
+            try {
+                const email = req.query.email;
+                const trainerId = req.query.trainerId;
+
+                const query = {};
+                if (email) query.trainerEmail = email;
+                if (trainerId) query.trainerId = trainerId;
+
+                const slots = await slotsCollection.find(query).toArray();
+
+                res.send(slots);
+            } catch (err) {
+                console.error('Error fetching slots:', err);
+                res.status(500).send({ error: 'Internal Server Error' });
+            }
         });
 
-        // GET /slots-by-email/:email
+        // get slots by trainerEmail
         app.get("/slots-by-email/:trainerEmail", async (req, res) => {
             const trainerEmail = req.params.trainerEmail;
             try {
-                const result = await slotsCollection.find({  trainerEmail }).toArray();
+                const result = await slotsCollection.find({ trainerEmail }).toArray();
                 res.send(result);
             } catch (err) {
                 res.status(500).send({ error: "Failed to fetch slots" });
             }
         });
 
-        // DELETE /slots/:id
+        app.get('/slots/:id', async (req, res) => {
+            const id = req.params.id;
+            try {
+                const slot = await slotsCollection.findOne({ _id: new ObjectId(id) });
+                if (!slot) {
+                    return res.status(404).send({ message: 'Slot not found' })
+                }
+                res.send(slot)
+            }
+            catch (err) {
+                res.status(500).send({ err: 'Server error' })
+            }
+        });
+
+        // post new slot
+        app.post('/slots', async (req, res) => {
+            const result = await slotsCollection.insertOne(req.body);
+            res.send(result);
+        });
+
+        // delete /slots/:id
         app.delete("/slots/:id", async (req, res) => {
             const id = req.params.id;
             try {
@@ -424,6 +466,66 @@ async function run() {
                 res.status(500).send({ error: "Failed to delete slot" });
             }
         });
+
+
+        // payment method api 
+        app.post("/create-payment-intent", async (req, res) => {
+            try {
+                const { price } = req.body;
+                const amount = parseInt(price * 100);
+
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount,
+                    currency: "usd",
+                    payment_method_types: ["card"],
+                });
+
+                res.send({ clientSecret: paymentIntent.client_secret });
+            } catch (error) {
+                console.error("Error creating payment intent:", error);
+                res.status(500).send({ message: "Failed to create payment intent" });
+            }
+        });
+
+        app.post("/payments", async (req, res) => {
+            try {
+                const paymentInfo = req.body;
+
+                // Check if user already paid for this slot
+                const alreadyPaid = await paymentsCollection.findOne({
+                    userEmail: paymentInfo.userEmail,
+                    slotId: paymentInfo.slotId,
+                });
+
+                if (alreadyPaid) {
+                    return res.status(400).send({ message: "You already booked this slot." });
+                }
+
+                const result = await paymentsCollection.insertOne(paymentInfo);
+                res.send(result);
+            } catch (error) {
+                console.error("Error saving payment:", error);
+                res.status(500).send({ message: "Failed to save payment info" });
+            }
+        });
+
+        app.patch("/slots/:id/increment", async (req, res) => {
+            try {
+                const slotId = req.params.id;
+                const filter = { _id: new ObjectId(slotId) };
+
+                const updateDoc = {
+                    $inc: { bookingCount: 1 },
+                };
+
+                const result = await slotsCollection.updateOne(filter, updateDoc);
+                res.send(result);
+            } catch (error) {
+                console.error("Error updating slot booking count:", error);
+                res.status(500).send({ message: "Failed to update booking count" });
+            }
+        });
+
 
 
 
