@@ -41,6 +41,7 @@ async function run() {
         const RejectTrainersCollection = client.db('fitnest').collection('rejected_trainer');
         const forumsCollection = client.db('fitnest').collection('forums');
         const classesCollection = client.db('fitnest').collection('classes');
+        const slotsCollection = client.db('fitnest').collection('slots');
 
 
         // middleware 
@@ -133,7 +134,7 @@ async function run() {
         });
 
         // get subcribers list
-        app.get('/subscribers', async (req, res) => {
+        app.get('/subscribers', verifyFBToken, async (req, res) => {
             const result = await subscribersCollection.find().toArray();
             res.send(result);
         });
@@ -146,13 +147,13 @@ async function run() {
         });
 
         // get all trainers 
-        app.get('/trainers/pending', async (req, res) => {
+        app.get('/trainers/pending', verifyFBToken, async (req, res) => {
             const trainers = await TrainersCollection.find({ status: "pending" }).toArray();
             res.send(trainers);
         });
 
         // get all trainer at userscollection in db 
-        app.get("/trainers/all", async (req, res) => {
+        app.get("/trainers/all", verifyFBToken, async (req, res) => {
             try {
                 const result = await usersCollection.find({ role: 'trainer' }).toArray()
                 res.send(result)
@@ -244,7 +245,7 @@ async function run() {
         });
 
         // get rejected trainer 
-        app.get("/trainer-applications/rejected/:email", async (req, res) => {
+        app.get("/trainer-applications/rejected/:email", verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const query = { email };
             const result = await RejectTrainersCollection.find(query).toArray();
@@ -252,7 +253,7 @@ async function run() {
         });
 
         // get trainer application status pending
-        app.get("/trainer-applications/pending/:email", async (req, res) => {
+        app.get("/trainer-applications/pending/:email", verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const query = { email, status: "pending" };
             const result = await TrainersCollection.find(query).toArray();
@@ -267,7 +268,7 @@ async function run() {
         })
 
         // get latest 6 forums
-        app.get("/forums/latest", async (req, res) => {
+        app.get("/forums/latest", verifyFBToken, async (req, res) => {
             try {
                 const forums = await forumsCollection.find()
                     .sort({ created_at: -1 })
@@ -281,7 +282,7 @@ async function run() {
         });
 
         // get all forums 
-        app.get('/all/forums/routes', async (req, res) => {
+        app.get('/all/forums/routes', verifyFBToken, async (req, res) => {
             try {
                 const forums = await forumsCollection.find().sort({ created_at: -1 }).toArray();
                 res.send(forums);
@@ -357,7 +358,7 @@ async function run() {
             const result = await classesCollection.find()
                 .skip(skip)
                 .limit(limit)
-                .sort({ created_at: -1 }) // optional: latest first
+                .sort({ created_at: -1 })
                 .toArray();
 
             const total = await classesCollection.estimatedDocumentCount();
@@ -374,6 +375,32 @@ async function run() {
             }).limit(5).toArray();
 
             res.send(trainers);
+        });
+
+        // get admin added all class need add a new slow
+        app.get('/admin-added-classes', async (req, res) => {
+            const result = await classesCollection.find().toArray();
+            res.send(result)
+        })
+
+
+
+        // GET trainer by email
+        app.get('/trainers-by-email/:email', async (req, res) => {
+            const trainer = await TrainersCollection.findOne({ email: req.params.email });
+            res.send(trainer);
+        });
+
+        // GET all slots by trainerId
+        app.get('/slots', async (req, res) => {
+            const slots = await slotsCollection.find({ trainerId: req.query.trainerId }).toArray();
+            res.send(slots);
+        });
+
+        // POST new slot
+        app.post('/slots', async (req, res) => {
+            const result = await slotsCollection.insertOne(req.body);
+            res.send(result);
         });
 
 
