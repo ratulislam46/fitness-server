@@ -29,7 +29,7 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
-        strict: true,
+        strict: false,
         deprecationErrors: true,
     }
 });
@@ -46,6 +46,7 @@ async function run() {
         const classesCollection = client.db('fitnest').collection('classes');
         const slotsCollection = client.db('fitnest').collection('slots');
         const paymentsCollection = client.db('fitnest').collection('payments');
+        const reviewsCollection = client.db('fitnest').collection('reviews');
 
 
         // middleware 
@@ -69,9 +70,34 @@ async function run() {
             catch (error) {
                 return res.status(403).send({ message: 'forbidden access' })
             }
-
         }
 
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const user = await usersCollection.findOne({ email })
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'fobidden access' })
+            }
+            next()
+        }
+
+        const verifyTrainer = async (req, res, next) => {
+            const email = req.decoded.email;
+            const user = await usersCollection.findOne({ email })
+            if (!user || user.role !== 'trainer') {
+                return res.status(403).send({ message: 'forbidden acess' })
+            }
+            next()
+        }
+
+        const verifyMember = async (req, res, next) => {
+            const email = req.decoded.email;
+            const user = await usersCollection.findOne({ email })
+            if (!user || user.role !== 'member') {
+                return res.status(403).send({ message: 'forbidden acess' })
+            }
+            next()
+        }
 
         // users info save in db 
         app.post('/users', async (req, res) => {
@@ -83,6 +109,23 @@ async function run() {
             const user = req.body;
             const result = await usersCollection.insertOne(user);
             res.send(result)
+        })
+
+        app.get('/users/:email/role', async (req, res) => {
+            const email = req.params.email;
+            try {
+                if (!email) {
+                    res.status(400).send({ message: 'Email is required' })
+                }
+                const user = await usersCollection.findOne({ email });
+                if (!user) {
+                    res.status(404).send({ message: 'User not found' })
+                }
+                res.send({ role: user.role || 'member' })
+            }
+            catch (error) {
+                res.status(500).send({ message: 'Failed to get role' })
+            }
         })
 
         // get users by user own email 
@@ -138,7 +181,7 @@ async function run() {
         });
 
         // get subcribers list
-        app.get('/subscribers', verifyFBToken, async (req, res) => {
+        app.get('/subscribers', verifyFBToken, verifyAdmin, async (req, res) => {
             const result = await subscribersCollection.find().toArray();
             res.send(result);
         });
@@ -151,20 +194,29 @@ async function run() {
         });
 
         // get trainer whoes status is confirm
-        app.get("/trainers", async (req, res) => {
+        app.get("/trainers", verifyFBToken, async (req, res) => {
             const status = req.query.status || "confirm";
             const trainers = await TrainersCollection.find({ status }).toArray();
             res.send(trainers);
         });
 
+        app.get('/team-trainers', async (req, res) => {
+            const trainers = await TrainersCollection
+                .find({ status: 'confirm' })
+                .sort({ paymentDate: -1 })
+                .limit(3)
+                .toArray();
+            res.send(trainers)
+        })
+
         // get all trainers 
-        app.get('/trainers/pending', verifyFBToken, async (req, res) => {
+        app.get('/trainers/pending', verifyFBToken, verifyAdmin, async (req, res) => {
             const trainers = await TrainersCollection.find({ status: "pending" }).toArray();
             res.send(trainers);
         });
 
         // get all trainer at userscollection in db 
-        app.get("/trainers/all", verifyFBToken, async (req, res) => {
+        app.get("/trainers/all", verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const result = await usersCollection.find({ role: 'trainer' }).toArray()
                 res.send(result)
@@ -279,7 +331,7 @@ async function run() {
         })
 
         // get latest 6 forums
-        app.get("/forums/latest", verifyFBToken, async (req, res) => {
+        app.get("/forums/latest", async (req, res) => {
             try {
                 const forums = await forumsCollection.find()
                     .sort({ created_at: -1 })
@@ -293,7 +345,7 @@ async function run() {
         });
 
         // get all forums 
-        app.get('/all/forums/routes', verifyFBToken, async (req, res) => {
+        app.get('/all/forums/routes', async (req, res) => {
             try {
                 const forums = await forumsCollection.find().sort({ created_at: -1 }).toArray();
                 res.send(forums);
@@ -360,19 +412,22 @@ async function run() {
             res.send(result)
         })
 
-        // get classes page limit
+        // GET /classes?search=Yoga&page=1&limit=6
         app.get('/classes', async (req, res) => {
-            const page = parseInt(req.query.page) || 1;
-            const limit = parseInt(req.query.limit) || 6;
-            const skip = (page - 1) * limit;
+            const { search = '', page = 1, limit = 6 } = req.query;
+            const skip = (parseInt(page) - 1) * parseInt(limit);
 
-            const result = await classesCollection.find()
+            const query = search
+                ? { title: { $regex: search, $options: 'i' } }
+                : {};
+
+            const total = await classesCollection.countDocuments(query);
+            const result = await classesCollection
+                .find(query)
                 .skip(skip)
-                .limit(limit)
                 .sort({ created_at: -1 })
+                .limit(parseInt(limit))
                 .toArray();
-
-            const total = await classesCollection.estimatedDocumentCount();
 
             res.send({ result, total });
         });
@@ -389,7 +444,7 @@ async function run() {
         });
 
         // get admin added all class need add a new slow
-        app.get('/admin-added-classes', async (req, res) => {
+        app.get('/admin-added-classes', verifyFBToken, async (req, res) => {
             const result = await classesCollection.find().toArray();
             res.send(result)
         })
@@ -406,7 +461,7 @@ async function run() {
             res.send(slots);
         });
 
-        // 👇 Add this route in your server file (e.g., index.js or slotRoutes.js)
+        //  Add this route in your server file (e.g., index.js or slotRoutes.js)
         app.get('/slots-in-trainer', async (req, res) => {
             try {
                 const email = req.query.email;
@@ -426,7 +481,7 @@ async function run() {
         });
 
         // get slots by trainerEmail
-        app.get("/slots-by-email/:trainerEmail", async (req, res) => {
+        app.get("/slots-by-email/:trainerEmail", verifyFBToken, async (req, res) => {
             const trainerEmail = req.params.trainerEmail;
             try {
                 const result = await slotsCollection.find({ trainerEmail }).toArray();
@@ -467,7 +522,6 @@ async function run() {
             }
         });
 
-
         // payment method api 
         app.post("/create-payment-intent", async (req, res) => {
             try {
@@ -484,6 +538,22 @@ async function run() {
             } catch (error) {
                 console.error("Error creating payment intent:", error);
                 res.status(500).send({ message: "Failed to create payment intent" });
+            }
+        });
+
+        // last six payment data get 
+        app.get("/api/recent-payments", async (req, res) => {
+            try {
+                const recentPayments = await paymentsCollection
+                    .find()
+                    .sort({ paymentDate: -1 })
+                    .limit(6)
+                    .toArray();
+
+                res.send(recentPayments);
+            } catch (error) {
+                console.error("Error fetching recent payments:", error);
+                res.status(500).send({ message: "Internal server error" });
             }
         });
 
@@ -526,6 +596,81 @@ async function run() {
             }
         });
 
+        // all price sumation 
+        app.get("/api/total-balance", async (req, res) => {
+            try {
+                const total = await paymentsCollection.aggregate([
+                    {
+                        $group: {
+                            _id: null,
+                            totalBalance: { $sum: "$price" }
+                        }
+                    }
+                ]).toArray();
+
+                const totalAmount = total[0]?.totalBalance || 0;
+                res.send({ totalBalance: totalAmount });
+            } catch (err) {
+                console.error("Error calculating balance", err);
+                res.status(500).send({ message: "Error calculating balance" });
+            }
+        });
+
+        app.get('/admin/chart-data', async (req, res) => {
+            try {
+                const subscribersCount = await subscribersCollection.estimatedDocumentCount();
+
+                const paidMembers = await paymentsCollection.distinct("userEmail");
+
+                res.send({
+                    subscribers: subscribersCount || 0,
+                    paidMembers: paidMembers.length || 0
+                });
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ error: "Server error" });
+            }
+        });
+
+        app.get("/booked-slots", async (req, res) => {
+            const userEmail = req.query.email;
+
+            if (!userEmail) {
+                return res.status(400).send({ message: "Email is required" });
+            }
+
+            try {
+                // Step 1: Get all payments for this user
+                const userPayments = await paymentsCollection
+                    .find({ userEmail })
+                    .toArray();
+
+                // Step 2: Extract all slotIds
+                const slotIds = userPayments.map(payment => new ObjectId(payment.slotId));
+
+                // Step 3: Find slot details from slot collection
+                const slots = await slotsCollection
+                    .find({ _id: { $in: slotIds } })
+                    .toArray();
+
+                // Optional: you can also send both payment and slot details
+                res.send({ slots });
+            } catch (error) {
+                console.error("Error getting booked slots:", error);
+                res.status(500).send({ message: "Server error" });
+            }
+        });
+
+        app.post("/reviews", async (req, res) => {
+            const review = req.body;
+            const result = await reviewsCollection.insertOne(review);
+            res.send(result);
+        });
+
+        app.get('/customer-review', async (req, res) => {
+            const data = await reviewsCollection.find().toArray();
+            res.send(data)
+        })
 
 
 
