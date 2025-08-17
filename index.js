@@ -35,7 +35,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        // await client.connect();
 
         const usersCollection = client.db('fitnest').collection('users');
         const subscribersCollection = client.db('fitnest').collection('subscribers');
@@ -333,6 +332,20 @@ async function run() {
         app.get("/forums/latest", async (req, res) => {
             try {
                 const forums = await forumsCollection.find()
+                    .sort({ created_at: -1 })
+                    .limit(6)
+                    .toArray();
+
+                res.send(forums);
+            } catch (err) {
+                res.status(500).send({ message: "Failed to fetch forums" });
+            }
+        });
+
+        // get latest 6 forums
+        app.get("/latest-classes", async (req, res) => {
+            try {
+                const forums = await classesCollection.find()
                     .sort({ created_at: -1 })
                     .limit(6)
                     .toArray();
@@ -671,7 +684,6 @@ async function run() {
             res.send(data)
         })
 
-        // await client.db("admin").command({ ping: 1 });
         // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     }
     finally {
