@@ -192,7 +192,7 @@ async function run() {
         });
 
         // get trainer whoes status is confirm
-        app.get("/trainers", verifyFBToken, async (req, res) => {
+        app.get("/trainers", async (req, res) => {
             const status = req.query.status || "confirm";
             const trainers = await TrainersCollection.find({ status }).toArray();
             res.send(trainers);
@@ -639,10 +639,31 @@ async function run() {
                     paidMembers: paidMembers.length || 0
                 });
             } catch (error) {
-                console.error(error);
+                // console.error(error);
                 res.status(500).send({ error: "Server error" });
             }
         });
+
+        // member dashboard data 
+        app.get('/member/chart/data', async (req, res) => {
+            try {
+                const totalSubscribers = await subscribersCollection.estimatedDocumentCount();
+                const totalClass = await classesCollection.estimatedDocumentCount();
+                const totalForum = await forumsCollection.estimatedDocumentCount();
+                const totalTrainers = await usersCollection.countDocuments({ role: 'trainer' });
+                const totalMembers = await usersCollection.countDocuments({ role: 'member' });
+                res.send({
+                    totalSubscribers: totalSubscribers || 0,
+                    totalClass: totalClass || 0,
+                    totalForum: totalForum || 0,
+                    totalTrainers: totalTrainers || 0,
+                    totalMembers: totalMembers || 0,
+                })
+            }
+            catch (error) {
+                res.status(500).send({ error: "Server error" });
+            }
+        })
 
         app.get("/booked-slots", async (req, res) => {
             const userEmail = req.query.email;
